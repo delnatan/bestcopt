@@ -46,7 +46,10 @@ class State:
     def initialize_variables(self):
         self.x = np.zeros(self.padded_shape)
         self.z1 = np.zeros(self.padded_shape)
-        z2shape = (3 * self.ndim - 1,) + self.padded_shape
+        if self.ndim == 1:
+            z2shape = self.padded_shape
+        elif 1 < self.ndim <= 3:
+            z2shape = (3 * (self.ndim - 1),) + self.padded_shape
         self.z2 = np.zeros(z2shape)
         self.u1 = np.zeros(self.padded_shape)
         self.u2 = np.zeros(z2shape)
@@ -59,18 +62,18 @@ def update_x(s):
     if s.ndim == 1:
         ft_wrk = np.conj(s.filters[0]) * np.fft.rfft(s.z2 - s.u2)
         ft_numerator = np.fft.rfft(-s.z1 + s.b + s.u1) + ft_wrk
-        s.x = np.fft.irfft(ft_numerator / s.ft_denominator)
+        s.x = np.fft.irfft(ft_numerator / s.ft_denominator, n=s.padded_shape[0])
     elif 1 < s.ndim <= 3:
         ft_wrk = np.fft.rfftn(s.z2 - s.u2, axes=s.ft_axes)
-        ft_wrk = sum([np.conj(f) * ft_wrk for f in s.filters])
-        ft_numerator = np.fft.rfftn(-s.z1 + s.b + s.u1, axes=s.ft_axes) + ft_wrk
+        ft_wrk = sum([np.conj(f) * ft_wrk[i] for i, f in enumerate(s.filters)])
+        ft_numerator = np.fft.rfftn(-s.z1 + s.b + s.u1) + ft_wrk
         s.x = np.fft.irfftn(ft_numerator / s.ft_denominator, s=s.padded_shape)
 
 
 def update_z1(s, rho):
     v = -s.x + s.b + s.u1
     z1prev = s.z1
-    s.z1 = s.mask_in * (v - 1 / rho) + s.mask_out * v
+    s.z1 = s.mask_in * np.maximum(v - 1 / rho, 0) + s.mask_out * v
     s.dz1 = s.z1 - z1prev
 
 
@@ -114,7 +117,7 @@ def compute_dual_residual(s, rho):
     # compute Dᵀ⋅Δz2
     if s.ndim == 1:
         Dt_dz2 = np.fft.irfft(
-            np.conj(s.filters[0]) * np.fft.rfft(s.dz2), n=self.padded_shape[0]
+            np.conj(s.filters[0]) * np.fft.rfft(s.dz2), n=s.padded_shape[0]
         )
         return np.linalg.norm([rho * s.dz1, -rho * Dt_dz2])
     elif 1 < s.ndim <= 3:
@@ -125,6 +128,4 @@ def compute_dual_residual(s, rho):
                 for i, f in enumerate(s.filters)
             ]
         )
-        return np.linalg.norm(
-            np.concatenate((rho * s.dz1[None, ...], -rho * Dt_dz2), axis=0)
-        )
+        return np.linalg.norm([rho * s.dz1, -rho * Dt_dz2])

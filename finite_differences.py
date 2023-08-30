@@ -103,7 +103,7 @@ def compute_2nd_order_filters_3d(n):
 
 def compute_2nd_order_filters(shape, ndim):
     if ndim==1:
-        return compute_2nd_order_filters_1d(shape)
+        return compute_2nd_order_filters_1d(shape[0])
     elif ndim==2:
         return compute_2nd_order_filters_2d(shape)
     elif ndim==3:
